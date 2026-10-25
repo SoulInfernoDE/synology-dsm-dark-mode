@@ -92,6 +92,16 @@ if (!SYNO.SDS.DarkMode.start) (function () {
     let probe = null;
     function parse(value) {
       if (typeof value !== "string" || !value || /gradient|url\(/i.test(value)) return null;
+      const hex = value.trim().match(/^#([0-9a-f]{3,8})$/i);
+      if (hex && [3, 4, 6, 8].indexOf(hex[1].length) >= 0) {
+        const h = hex[1].length < 6 ? hex[1].replace(/./g, c => c + c) : hex[1];
+        return [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16)).concat([h.length === 8 ? parseInt(h.substr(6, 2), 16) / 255 : 1]);
+      }
+      const rgb = value.trim().match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)$/i);
+      if (rgb) {
+        const a = rgb[4] === undefined ? 1 : rgb[4].endsWith("%") ? parseFloat(rgb[4]) / 100 : parseFloat(rgb[4]);
+        return [+rgb[1], +rgb[2], +rgb[3], a];
+      }
       // Let the browser parse every CSS color syntax.
       probe = probe || document.createElement("span");
       probe.style.color = "";
@@ -105,18 +115,23 @@ if (!SYNO.SDS.DarkMode.start) (function () {
       return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1];
     }
 
+    const format = (rgb, a) => (a >= 0.999 ? "#" + rgb.map(v => v.toString(16).padStart(2, "0")).join("")
+      : "rgba(" + rgb.join(",") + "," + Math.round(a * 1000) / 1000 + ")");
+
     const cache = {};
     function transform(value, role) {
       const key = role + "|" + value;
       if (key in cache) return cache[key];
       const c = parse(value);
       let out = value;
-      if (c && c[3] > 0) {
+      if (c && c[3] > 0 && role === "shadow") {
+        // Light emboss shadows look like glow on dark backgrounds.
+        out = toOklch(c[0], c[1], c[2])[0] > 0.6 ? format([0, 0, 0], c[3] * 0.5)
+          : format([c[0], c[1], c[2]].map(Math.round), Math.min(1, c[3] * 1.6));
+      } else if (c && c[3] > 0) {
         const lch = toOklch(c[0], c[1], c[2]);
         const next = roles[role](lch[0], lch[1]);
-        const rgb = fromOklch(next[0], next[1], lch[2]);
-        out = c[3] >= 0.999 ? "#" + rgb.map(v => v.toString(16).padStart(2, "0")).join("")
-          : "rgba(" + rgb.join(",") + "," + Math.round(c[3] * 1000) / 1000 + ")";
+        out = format(fromOklch(next[0], next[1], lch[2]), c[3]);
       }
       cache[key] = out;
       return out;
@@ -221,6 +236,209 @@ if (!SYNO.SDS.DarkMode.start) (function () {
   })();
 
   // --------------------------------------------------------------------------
+  // Runtime styles: apps such as Container Manager insert their CSS as <style>
+  // elements from JavaScript when they open. That CSS is not on the NAS as a
+  // file, so the generator cannot see it. The same dark copies are made here,
+  // from the rules the browser parsed (same roles, palette and boost as
+  // darkgen.py).
+  // --------------------------------------------------------------------------
+
+  SYNO.SDS.DarkMode.RuntimeStyles = (function () {
+    const P = SYNO.SDS.DarkMode.Palette;
+    const BOOST = ":not(#dsmdark)";
+    const ROLES = {
+      "color": "text", "caret-color": "text", "column-rule-color": "text", "text-decoration-color": "text",
+      "-webkit-text-fill-color": "text", "fill": "text", "stroke": "text",
+      "background-color": "bg", "background-image": "bg",
+      "border-top-color": "border", "border-right-color": "border", "border-bottom-color": "border",
+      "border-left-color": "border", "outline-color": "border",
+      "box-shadow": "shadow", "text-shadow": "shadow"
+    };
+    // Shorthands that hold the value when it uses a variable (the longhands
+    // are empty in the CSSOM then).
+    const SHORTHANDS = {
+      "background-color": ["background"], "background-image": ["background"],
+      "border-top-color": ["border-top", "border-color", "border"], "border-right-color": ["border-right", "border-color", "border"],
+      "border-bottom-color": ["border-bottom", "border-color", "border"], "border-left-color": ["border-left", "border-color", "border"],
+      "outline-color": ["outline"]
+    };
+    const COLOR = /#[0-9a-f]{3,8}\b|(?:rgba?|hsla?)\([^()]*\)|\b(?:white|black|gray|grey|silver|whitesmoke|gainsboro|lightgray|lightgrey|darkgray|darkgrey|dimgray|dimgrey|snow|ivory|aliceblue|ghostwhite)\b/gi;
+    const PSEUDO_ELEMENT = /^:(?::|(?:before|after|first-line|first-letter|selection|-moz-selection|-moz-placeholder|-ms-input-placeholder|-webkit-input-placeholder)\b)/i;
+    const converted = new WeakMap();  // <style> element -> [css text, dark rules]
+    let own = null;
+    let media = "not all";
+    let rootVars = null;
+    let timer = null;
+
+    function customRole(name) {
+      const n = name.toLowerCase().split("__")[0];
+      if (n.indexOf("shadow") >= 0) return "shadow";
+      if (/bkg|(?:^|[^a-z])bg|background/.test(n)) return "bg";
+      if (/border|outline|divider|split|separator|stroke/.test(n)) return "border";
+      return "text";
+    }
+
+    // Light values of DSM's global variables (from the original stylesheets,
+    // not computed: in dark mode those are already dark).
+    function originalRootVars() {
+      if (rootVars) return rootVars;
+      rootVars = {};
+      for (const sheet of document.styleSheets) {
+        if (!sheet.href || sheet.href.indexOf(SYNO.SDS.DarkMode.BASE) >= 0) continue;
+        let rules;
+        try { rules = sheet.cssRules; } catch (e) { continue; }
+        for (const rule of rules) {
+          if (rule.type !== CSSRule.STYLE_RULE || !/^(:root|html)$/.test(rule.selectorText.trim())) continue;
+          for (let i = 0; i < rule.style.length; i++) {
+            const name = rule.style[i];
+            if (name.startsWith("--")) rootVars[name] = rule.style.getPropertyValue(name).trim();
+          }
+        }
+      }
+      return rootVars;
+    }
+
+    function resolveVar(name, seen) {
+      const vars = originalRootVars();
+      if (!(name in vars) || seen.indexOf(name) >= 0) return null;
+      const value = vars[name];
+      const m = value.match(/^var\(\s*(--[\w-]+)\s*\)$/);
+      if (m) return resolveVar(m[1], seen.concat(name));
+      COLOR.lastIndex = 0;
+      return COLOR.test(value) && value.replace(COLOR, "").trim() === "" ? value : null;
+    }
+
+    function darken(value, role) {
+      value = value.replace(/var\(\s*(--[\w-]+)\s*(?:,[^()]*)?\)/g, (m, name) => resolveVar(name, []) || m);
+      return value.split(/(url\([^)]*\))/i).map(part => (/^url\(/i.test(part) ? part
+        : part.replace(COLOR, c => P.transform(c, role)))).join("");
+    }
+
+    function splitTop(text) {
+      const parts = [];
+      let depth = 0, start = 0, quote = null;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (quote) { if (c === quote) quote = null; continue; }
+        if (c === '"' || c === "'") quote = c;
+        else if (c === "(" || c === "[") depth++;
+        else if (c === ")" || c === "]") depth--;
+        else if (c === "," && depth === 0) { parts.push(text.slice(start, i)); start = i + 1; }
+      }
+      parts.push(text.slice(start));
+      return parts.map(p => p.trim()).filter(Boolean);
+    }
+
+    // Inserts the boost into the subject compound, before a pseudo-element.
+    function boost(selector) {
+      let depth = 0, last = 0, quote = null;
+      for (let i = 0; i < selector.length; i++) {
+        const c = selector[i];
+        if (quote) { if (c === quote) quote = null; continue; }
+        if (c === '"' || c === "'") quote = c;
+        else if (c === "(" || c === "[") depth++;
+        else if (c === ")" || c === "]") depth--;
+        else if (depth === 0 && /[\s>+~]/.test(c)) last = i + 1;
+      }
+      const compound = selector.slice(last);
+      let cut = compound.length;
+      depth = 0;
+      for (let i = 0; i < compound.length; i++) {
+        const c = compound[i];
+        if (c === "(" || c === "[") depth++;
+        else if (c === ")" || c === "]") depth--;
+        else if (depth === 0 && c === ":" && PSEUDO_ELEMENT.test(compound.slice(i))) { cut = i; break; }
+      }
+      return selector.slice(0, last) + compound.slice(0, cut) + BOOST + compound.slice(cut);
+    }
+
+    function convertRules(rules, out) {
+      for (const rule of rules) {
+        if (rule.type === CSSRule.STYLE_RULE) {
+          const st = rule.style;
+          const decls = [];
+          const shorthands = {};
+          for (let i = 0; i < st.length; i++) {
+            const prop = st[i];
+            const custom = prop.startsWith("--");
+            const role = custom ? customRole(prop) : ROLES[prop];
+            if (!role) continue;
+            let name = prop;
+            let value = st.getPropertyValue(prop).trim();
+            if (!value && SHORTHANDS[prop]) {
+              name = SHORTHANDS[prop].find(s => st.getPropertyValue(s).trim()) || prop;
+              if (shorthands[name]) continue;
+              shorthands[name] = true;
+              value = st.getPropertyValue(name).trim();
+            }
+            if (!value) continue;
+            COLOR.lastIndex = 0;
+            if (custom && !COLOR.test(value) && !/var\(/.test(value)) continue;
+            const priority = st.getPropertyPriority(name) ? " !important" : "";
+            decls.push(name + ":" + darken(value, role) + priority);
+          }
+          if (decls.length) out.push(splitTop(rule.selectorText).map(boost).join(",") + "{" + decls.join(";") + "}");
+        } else if (rule.cssRules && (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE)) {
+          const inner = [];
+          convertRules(rule.cssRules, inner);
+          if (inner.length) {
+            const head = rule.type === CSSRule.MEDIA_RULE ? "@media " + rule.media.mediaText : "@supports " + rule.conditionText;
+            out.push(head + "{" + inner.join("") + "}");
+          }
+        }
+      }
+    }
+
+    function rebuild() {
+      timer = null;
+      const chunks = [];
+      for (const el of document.querySelectorAll("style")) {
+        if (el === own || !el.sheet) continue;
+        const text = el.textContent;
+        let entry = converted.get(el);
+        if (!entry || entry[0] !== text) {
+          const out = [];
+          try { convertRules(el.sheet.cssRules, out); } catch (e) { /* unreadable sheet */ }
+          entry = [text, out.join("\n")];
+          converted.set(el, entry);
+        }
+        if (entry[1]) chunks.push(entry[1]);
+      }
+      const css = chunks.length ? "@media " + media + "{\n" + chunks.join("\n") + "\n}" : "";
+      if (own.textContent !== css) own.textContent = css;
+    }
+
+    function schedule() {
+      if (!timer) timer = setTimeout(rebuild, 250);
+    }
+
+    return {
+      start() {
+        if (own) return;
+        own = document.createElement("style");
+        own.id = "dsm-dark-runtime";
+        document.head.appendChild(own);
+        new MutationObserver(records => {
+          for (const r of records) {
+            const nodes = [r.target].concat(Array.from(r.addedNodes), Array.from(r.removedNodes));
+            if (nodes.some(n => n !== own && (n.nodeName === "STYLE" || (n.parentNode && n.parentNode.nodeName === "STYLE" && n.parentNode !== own)))) {
+              schedule();
+              return;
+            }
+          }
+        }).observe(document.head, { childList: true, subtree: true, characterData: true });
+        rebuild();
+      },
+      // Same condition as the dark block of the generated stylesheet.
+      setMedia(text) {
+        if (text === media) return;
+        media = text;
+        if (own) rebuild();
+      }
+    };
+  })();
+
+  // --------------------------------------------------------------------------
   // Theme: user choice, stylesheet switch and stylesheet freshness
   // --------------------------------------------------------------------------
 
@@ -290,10 +508,10 @@ if (!SYNO.SDS.DarkMode.start) (function () {
 
     function apply() {
       const block = darkBlock();
-      if (block) {
-        const text = mode === "dark" ? "all" : mode === "light" ? "not all" : DM.AUTO_MEDIA;
-        if (block.media.mediaText !== text) block.media.mediaText = text;
-      }
+      const text = mode === "dark" ? "all" : mode === "light" ? "not all" : DM.AUTO_MEDIA;
+      if (block && block.media.mediaText !== text) block.media.mediaText = text;
+      // Runtime styles only while the generated stylesheet is there as well.
+      DM.RuntimeStyles.setMedia(ready() ? text : "not all");
       // Charts and the page attribute follow the stylesheet: while the NAS is
       // still building it, everything stays light.
       const dark = isDark() && ready();
@@ -386,6 +604,7 @@ if (!SYNO.SDS.DarkMode.start) (function () {
     return {
       MODES: MODES,
       init() {
+        DM.RuntimeStyles.start();
         setMode(SYNO.SDS.UserSettings.getProperty(DM.APP, "mode") || "auto", false);
         if (media) {
           const onChange = () => { if (mode === "auto") apply(); };

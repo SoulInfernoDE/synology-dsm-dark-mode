@@ -71,6 +71,11 @@ tatsächlich lädt:
    Zugriffsregeln), wird die Liste verwendet, die der Browser bei der
    Anmeldung meldet – das Design entsteht also unabhängig davon, wie DSM
    aufgerufen wird.
+8. **Zur Laufzeit eingefügte Stile:** Manche Apps (zum Beispiel der
+   Container Manager) fügen ihr CSS beim Öffnen per JavaScript ein; es liegt
+   also nicht als Datei auf dem NAS. Das Desktop-Skript erzeugt die dunklen
+   Kopien dieser Regeln im Browser – mit denselben Rollen, derselben Palette
+   und demselben Spezifitätszuschlag – und folgt demselben Schalter.
 
 Das helle Design bleibt völlig unverändert: Mit „Hell“ sind die berechneten
 Farben aller Elemente identisch mit DSM ohne Paket.
@@ -99,12 +104,14 @@ Farben aller Elemente identisch mit DSM ohne Paket.
 | 7.2.2-72806 (VirtualDSM) | alle Prüfungen bestanden |
 | 7.4.1-90080 (VirtualDSM) | alle Prüfungen bestanden, keine Codeänderung nötig |
 
-Prüfungen: Erzeugung auf dem NAS, Anmeldeseite, Taskleisten-Menü und Wahl pro
-Benutzer, Kontrast-Audit von 14 Ansichten (9 Seiten der Systemsteuerung,
-File Station, Speicher-Manager, Ressourcen-Monitor, DSM-Hilfe,
-Paket-Zentrum), Diagramme, unverändertes helles Design (berechnete Farben von
-8.000 Elementen verglichen), Selbstheilung nach einem geänderten
-System-Stylesheet.
+Prüfungen (Chromium und Firefox): Erzeugung auf dem NAS, Anmeldeseite,
+Taskleisten-Menü und Wahl pro Benutzer, Kontrast-Audit von 14 Ansichten
+(9 Seiten der Systemsteuerung, File Station, Speicher-Manager,
+Ressourcen-Monitor, DSM-Hilfe, Paket-Zentrum) sowie Container Manager unter
+7.4.1, Diagramme, unverändertes helles Design (berechnete Farben von
+9.000 Elementen verglichen), Selbstheilung nach einem geänderten
+System-Stylesheet, Erstellung bei nicht erreichbarer Startseite (Reverse
+Proxy).
 
 Was sich von 7.2.2 zu 7.4.1 geändert hat und wie das Paket damit umgeht:
 
