@@ -1,0 +1,80 @@
+#!/bin/sh
+# Rebuild the dark stylesheet from the stylesheets DSM currently loads.
+#
+# The list of stylesheets comes from DSM's own start page (in load order),
+# plus stylesheets a browser reported that the start page does not list
+# (var/extra-sheets.txt, written by regen.cgi). Runs as the package user.
+
+SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+TARGET="${SYNOPKG_PKGDEST:-$(dirname "$(dirname "$SELF")")}"
+VAR="${SYNOPKG_PKGVAR:-/var/packages/DarkMode/var}"
+UI="$TARGET/ui"
+LOCK="$VAR/regen.lock"
+LOG="$VAR/regen.log"
+
+mkdir -p "$VAR"
+
+# One run at a time. The lock holds the PID of the running build; a lock
+# whose process is gone (killed during a package upgrade) is taken over.
+take_lock() {
+  mkdir "$LOCK" 2>/dev/null || return 1
+  echo $$ > "$LOCK/pid"
+}
+if ! take_lock; then
+  pid="$(cat "$LOCK/pid" 2>/dev/null)"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    exit 0
+  fi
+  rm -rf "$LOCK"
+  take_lock || exit 0
+fi
+trap 'rm -rf "$LOCK"' EXIT INT TERM
+
+log() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
+}
+
+# Keep the log short.
+if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 500 ]; then
+  tail -n 200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
+
+port="$(sed -n 's/^admin_port="\{0,1\}\([0-9]*\)"\{0,1\}$/\1/p' /etc/synoinfo.conf 2>/dev/null | head -n1)"
+[ -n "$port" ] || port=5000
+
+# At boot the web server may not be up yet: retry for a few minutes.
+tries="${1:-1}"
+i=0
+while :; do
+  if curl -fsSkL --max-time 20 "http://127.0.0.1:${port}/" -o "$VAR/index.html.tmp" 2>/dev/null \
+     && grep -q 'rel="stylesheet"' "$VAR/index.html.tmp"; then
+    mv "$VAR/index.html.tmp" "$VAR/index.html"
+    break
+  fi
+  i=$((i + 1))
+  if [ "$i" -ge "$tries" ]; then
+    rm -f "$VAR/index.html.tmp"
+    if [ -f "$VAR/index.html" ]; then
+      log "start page not reachable, using the last saved one"
+      break
+    fi
+    log "start page not reachable on port $port, nothing generated"
+    exit 1
+  fi
+  sleep 10
+done
+
+if python3 "$TARGET/lib/darkgen.py" \
+     --root /usr/syno/synoman \
+     --index "$VAR/index.html" \
+     --list "$VAR/extra-sheets.txt" \
+     --base "$TARGET/share/base.css" \
+     --extra "$TARGET/share/extra.css" \
+     --cache "$VAR/img-cache" \
+     --manifest "$UI/manifest.json" \
+     --out "$UI/style.css" 2>> "$LOG"; then
+  log "stylesheet rebuilt"
+else
+  log "generator failed"
+  exit 1
+fi

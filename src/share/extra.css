@@ -1,0 +1,21 @@
+/*
+ * Hand-written additions to the generated dark theme. Everything here ends up
+ * inside the same dark @media block as the generated rules, so it follows the
+ * same switch. Keep this file small: only things the generator cannot derive
+ * from DSM's stylesheets belong here (inline styles, canvas drawings).
+ * ECharts charts are themed by DarkMode.js through their options.
+ */
+
+/* Native form controls, scrollbars and autofill follow the dark scheme. */
+:root:not(#dsmdark) {
+  color-scheme: dark;
+}
+
+/* Form fields DSM leaves to the browser default (white in light mode): use
+   the dark surface instead of the browser's own dark grey. No specificity
+   boost, so every styled DSM field keeps its generated color. */
+input,
+textarea,
+select {
+  background-color: #1e1e1e;
+}

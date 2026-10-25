@@ -1,0 +1,10 @@
+[app]
+title="Darstellung"
+
+[panel]
+desc="Farbschema von DSM für Ihr Konto:"
+
+[mode]
+auto="Automatisch (wie das System)"
+light="Hell"
+dark="Dunkel"

@@ -1,0 +1,10 @@
+[app]
+title="Appearance"
+
+[panel]
+desc="Color scheme of DSM for your account:"
+
+[mode]
+auto="Automatic (like the system)"
+light="Light"
+dark="Dark"

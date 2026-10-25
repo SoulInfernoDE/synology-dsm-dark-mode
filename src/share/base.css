@@ -1,0 +1,22 @@
+/*
+ * Always active (light and dark): the taskbar tray button of DSM Dark Mode.
+ * The sprite holds the normal, hover and pressed state like DSM's own tray
+ * icons, one 32 x 32 px cell per state. ":not(#dsmdark)" matches the specificity boost of the
+ * generated rules, so DSM's generic tray rules cannot replace the icon.
+ */
+.tray-item.sds-tray-item-darkmode:not(#dsmdark) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='96' viewBox='0 0 32 96'%3E%3Cg transform='translate%284 4%29' fill='%23fff' stroke='%23fff' fill-opacity='.75' stroke-opacity='.75'%3E%3Ccircle cx='12' cy='12' r='7.25' fill='none' stroke-width='1.5'/%3E%3Cpath stroke='none' d='M12 4.75a7.25 7.25 0 0 1 0 14.5z'/%3E%3C/g%3E%3Cg transform='translate%284 36%29' fill='%23fff' stroke='%23fff' fill-opacity='1' stroke-opacity='1'%3E%3Ccircle cx='12' cy='12' r='7.25' fill='none' stroke-width='1.5'/%3E%3Cpath stroke='none' d='M12 4.75a7.25 7.25 0 0 1 0 14.5z'/%3E%3C/g%3E%3Cg transform='translate%284 68%29' fill='%232396fa' stroke='%232396fa' fill-opacity='1' stroke-opacity='1'%3E%3Ccircle cx='12' cy='12' r='7.25' fill='none' stroke-width='1.5'/%3E%3Cpath stroke='none' d='M12 4.75a7.25 7.25 0 0 1 0 14.5z'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 32px 96px;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+}
+.tray-item.sds-tray-item-darkmode:not(#dsmdark):hover {
+  background-position: 0 -32px;
+}
+.tray-item.sds-tray-item-darkmode.pressed:not(#dsmdark),
+.tray-item.sds-tray-item-darkmode:not(#dsmdark):active {
+  background-position: 0 -64px;
+}
+.sds-darkmode-panel .sds-darkmode-desc {
+  margin-bottom: 6px;
+}

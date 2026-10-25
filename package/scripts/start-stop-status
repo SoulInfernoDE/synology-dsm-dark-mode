@@ -1,0 +1,39 @@
+#!/bin/sh
+# DSM service control. While the package runs, DSM links ui/ into the desktop
+# (webman/3rdparty/DarkMode) and loads its style.css; stopping the package
+# turns the dark theme off.
+
+TARGET="${SYNOPKG_PKGDEST:-/var/packages/DarkMode/target}"
+VAR="${SYNOPKG_PKGVAR:-/var/packages/DarkMode/var}"
+FLAG="$VAR/enabled"
+
+case "$1" in
+  start)
+    mkdir -p "$VAR"
+    touch "$FLAG"
+    # Rebuild in the background: DSM or packages may have changed their
+    # stylesheets (for example after a DSM update). At boot the web server
+    # may still be starting, so allow retries.
+    if command -v setsid >/dev/null 2>&1; then
+      setsid "$TARGET/bin/darkmode-regen" 30 </dev/null >/dev/null 2>&1 &
+    else
+      nohup "$TARGET/bin/darkmode-regen" 30 </dev/null >/dev/null 2>&1 &
+    fi
+    exit 0
+    ;;
+  stop)
+    rm -f "$FLAG"
+    exit 0
+    ;;
+  status)
+    [ -f "$FLAG" ] && exit 0
+    exit 3
+    ;;
+  log)
+    echo "$VAR/regen.log"
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac

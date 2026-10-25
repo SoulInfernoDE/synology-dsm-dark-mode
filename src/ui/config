@@ -1,0 +1,25 @@
+{
+  "DarkMode.js": {
+    "SYNO.SDS.DarkMode.Instance": {
+      "type": "app",
+      "title": "app:title",
+      "hidden": true,
+      "autoLaunch": true,
+      "allUsers": true,
+      "allowMultiInstance": false,
+      "allowStandalone": false,
+      "canLaunch": { "standalone": false },
+      "texts": "texts",
+      "preloadTexts": ["app:title", "panel:desc", "mode:auto", "mode:light", "mode:dark"],
+      "depend": ["SYNO.SDS.DarkMode.Tray"]
+    },
+    "SYNO.SDS.DarkMode.Tray": {
+      "type": "lib",
+      "title": "app:title",
+      "iconCls": "sds-tray-item-darkmode",
+      "allUsers": true,
+      "texts": "texts",
+      "depend": []
+    }
+  }
+}

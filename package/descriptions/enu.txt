@@ -1,0 +1,1 @@
+Dark theme for the DSM 7 desktop: login page, desktop, Control Panel, Package Center, File Station, Storage Manager, Resource Monitor and other built-in apps. Follows the dark mode of your operating system or can be set per user from the taskbar. The theme is generated on the NAS from DSM's own stylesheets, so it adapts to DSM and package updates by itself. Runs without root.
