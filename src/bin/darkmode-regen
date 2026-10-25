@@ -19,6 +19,33 @@ LOG="$VAR/regen.log"
 
 mkdir -p "$VAR"
 
+# --off: the package is stopped. DSM keeps linking ui/style.css even then, so
+# end a running build and leave only the always active rules and an empty dark
+# block (the next start rebuilds the theme). The precompressed copy has to go
+# as well: DSM's web server prefers it.
+if [ "${1:-}" = "--off" ]; then
+  pid="$(cat "$LOCK/pid" 2>/dev/null)"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    # Started with setsid: the build and its generator form one process group.
+    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
+    # Wait until it is gone, so it cannot write the stylesheet afterwards.
+    i=0
+    while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 20 ]; do
+      sleep 0.5
+      i=$((i + 1))
+    done
+    rm -rf "$LOCK"
+  fi
+  {
+    echo "/* DSM Dark Mode - package stopped, theme off. */"
+    cat "$TARGET/share/base.css"
+    echo "@media (prefers-color-scheme: dark){}"
+  } > "$UI/style.css.tmp" && mv "$UI/style.css.tmp" "$UI/style.css"
+  rm -f "$UI/style.css.gz"
+  printf '{"state":"off","time":%s}\n' "$(date +%s)" > "$UI/status.json"
+  exit 0
+fi
+
 # One run at a time. The lock holds the PID of the running build; a lock
 # whose process is gone (killed during a package upgrade) is taken over.
 take_lock() {
@@ -33,7 +60,9 @@ if ! take_lock; then
   rm -rf "$LOCK"
   take_lock || exit 0
 fi
-trap 'rm -rf "$LOCK"' EXIT INT TERM
+trap 'rm -rf "$LOCK"' EXIT
+# A trap on INT/TERM replaces the default, so end explicitly (package stop).
+trap 'exit 1' INT TERM
 
 # Build state for the desktop script (ui/status.json, readable by every
 # signed-in user): "running", "ok" or "failed". Details stay in the log.

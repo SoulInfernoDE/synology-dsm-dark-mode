@@ -23,6 +23,8 @@ case "$1" in
     ;;
   stop)
     rm -f "$FLAG"
+    # DSM keeps linking ui/style.css while the package is stopped.
+    "$TARGET/bin/darkmode-regen" --off
     exit 0
     ;;
   status)
