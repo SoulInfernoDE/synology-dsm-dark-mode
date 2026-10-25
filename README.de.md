@@ -163,7 +163,8 @@ gefüllten Kreis. Wird das Paket angehalten, ist das Design aus.
 Die erste Erstellung dauert einige Sekunden, auf langsameren Modellen bis zu
 einigen Minuten; bis dahin bleibt DSM hell, und das Menü in der Taskleiste
 zeigt, dass das Design erstellt wird. Kann es nicht erstellt werden, steht das
-im Menü, die Details unter **Paket-Zentrum > Dark Mode for DSM > Protokoll**.
+im Menü, zusammen mit der Protokolldatei
+(`/var/packages/<Paket>/var/regen.log`).
 
 ## Grenzen
 
@@ -190,6 +191,9 @@ tools/screenshots.py    README-Screenshots (headless Firefox, DSM_USER/DSM_PASS)
 src/bin/darkmode-regen  Neuaufbau-Skript (Startseite oder Browser-Liste -> Generator)
 package/                SPK-Steuerdateien
 ```
+
+`./build.sh --stage <Ordner>` legt nur die Paketdateien in `<Ordner>` ab
+(für den SynoCommunity-Build).
 
 Der Generator läuft auch auf einem PC mit einer gespeicherten DSM-Startseite:
 

@@ -7,7 +7,14 @@
 // (build.json is never cached). Keep this file small and stable.
 Ext.namespace("SYNO.SDS.DarkMode");
 
-SYNO.SDS.DarkMode.BASE = "webman/3rdparty/DarkMode/";
+// The package folder in the DSM web root ("webman/3rdparty/<package>/"), from
+// DSM's own app configuration: the package name differs between the GitHub
+// and the SynoCommunity package.
+SYNO.SDS.DarkMode.BASE = (function () {
+  const entry = SYNO.SDS.Config.FnMap["SYNO.SDS.DarkMode.Instance"];
+  const url = entry && entry.config && entry.config.jsBaseURL;
+  return url ? url.replace(/\/?$/, "/") : "webman/3rdparty/DarkMode/";
+})();
 
 Ext.define("SYNO.SDS.DarkMode.Instance", {
   extend: "SYNO.SDS.AppInstance",

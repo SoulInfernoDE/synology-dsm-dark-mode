@@ -3,7 +3,7 @@ title="Appearance"
 
 [panel]
 preparing="The dark theme is being created on the NAS. After installing or updating the package this can take a few minutes."
-failed="The dark theme could not be created. Details: Package Center > Dark Mode for DSM > Log."
+failed="The dark theme could not be created. Details: {0}"
 desc="Color scheme of DSM for your account:"
 
 [mode]

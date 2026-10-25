@@ -1,7 +1,9 @@
 #!/bin/bash
-# Build the DSM Dark Mode package (noarch SPK for DSM 7.0+).
+# Build the Dark Mode for DSM package (noarch SPK for DSM 7.0+).
 #
-#   ./build.sh            -> dist/DarkMode-<version>-noarch.spk
+#   ./build.sh                 -> dist/DarkMode-<version>-noarch.spk
+#   ./build.sh --stage <dir>   -> only the installed files, into <dir>
+#                                 (used by the SynoCommunity spksrc package)
 #
 # Requirements: bash, tar, gzip, python3 (build time only: syntax checks and
 # the placeholder stylesheet).
@@ -16,41 +18,52 @@ BUILD="$ROOT/build"
 STAGE="$BUILD/stage"
 OUT="$ROOT/dist"
 
-rm -rf "$BUILD"
-mkdir -p "$STAGE/target" "$STAGE/spk" "$OUT"
-T="$STAGE/target"
-
 python3 -I -m py_compile src/lib/darkgen.py src/lib/darkimg.py
 python3 -I -c "import json, sys; json.load(open(sys.argv[1]))" src/ui/config
 for f in src/bin/darkmode-regen src/ui/regen.cgi package/scripts/*; do sh -n "$f"; done
 
-# --- package.tgz contents (installed to /var/packages/DarkMode/target) ---
-cp -a src/bin src/lib src/share src/ui "$T/"
-find "$T" -name '__pycache__' -prune -exec rm -rf {} +
-echo "$VERSION" > "$T/VERSION"
-cp LICENSE "$T/LICENSE"
+# --- package files (installed to /var/packages/<package>/target) ---
+stage() {
+  T="$1"
+  mkdir -p "$T"
+  cp -a src/bin src/lib src/share src/ui "$T/"
+  find "$T" -name '__pycache__' -prune -exec rm -rf {} +
+  echo "$VERSION" > "$T/VERSION"
+  cp LICENSE "$T/LICENSE"
 
-# Placeholder until the NAS has generated the real stylesheet: DSM only links
-# style.css into the desktop if it exists when the package is installed.
-{
-  echo "/* DSM Dark Mode $VERSION - placeholder, rebuilt on the NAS after start. */"
-  cat src/share/base.css
-  echo "@media (prefers-color-scheme: dark){}"
-} > "$T/ui/style.css"
-echo '{"generator":0,"signature":"placeholder","generated":0,"hrefs":[],"sheets":[]}' > "$T/ui/manifest.json"
-echo '{"state":"pending","time":0}' > "$T/ui/status.json"
+  # Placeholder until the NAS has generated the real stylesheet: DSM only links
+  # style.css into the desktop if it exists when the package is installed.
+  {
+    echo "/* DSM Dark Mode $VERSION - placeholder, rebuilt on the NAS after start. */"
+    cat src/share/base.css
+    echo "@media (prefers-color-scheme: dark){}"
+  } > "$T/ui/style.css"
+  echo '{"generator":0,"signature":"placeholder","generated":0,"hrefs":[],"sheets":[]}' > "$T/ui/manifest.json"
+  echo '{"state":"pending","time":0}' > "$T/ui/status.json"
 
-# Cache busting. DSM versions style.css with the change time of ui/config and
-# DarkMode.js with its own build number; neither changes on package updates by
-# itself. Touching config renews the style.css URL, build.json gives the
-# loader in DarkMode.js a fresh URL for DarkMode.core.js.
-BUILD_ID="${VERSION}-$(date +%s)"
-printf '{"version":"%s","build":"%s"}\n' "$VERSION" "$BUILD_ID" > "$T/ui/build.json"
-touch "$T/ui/config"
+  # Cache busting. DSM versions style.css with the change time of ui/config and
+  # DarkMode.js with its own build number; neither changes on package updates by
+  # itself. Touching config renews the style.css URL, build.json gives the
+  # loader in DarkMode.js a fresh URL for DarkMode.core.js.
+  BUILD_ID="${VERSION}-$(date +%s)"
+  printf '{"version":"%s","build":"%s"}\n' "$VERSION" "$BUILD_ID" > "$T/ui/build.json"
+  touch "$T/ui/config"
 
-find "$T" -type d -exec chmod 755 {} +
-find "$T" -type f -exec chmod 644 {} +
-chmod 755 "$T/bin/darkmode-regen" "$T/ui/regen.cgi" "$T/lib/darkgen.py"
+  find "$T" -type d -exec chmod 755 {} +
+  find "$T" -type f -exec chmod 644 {} +
+  chmod 755 "$T/bin/darkmode-regen" "$T/ui/regen.cgi" "$T/lib/darkgen.py"
+}
+
+if [ "${1:-}" = "--stage" ]; then
+  [ -n "${2:-}" ] || { echo "usage: $0 --stage <dir>" >&2; exit 2; }
+  stage "$2"
+  echo "staged files in $2"
+  exit 0
+fi
+
+rm -rf "$BUILD"
+mkdir -p "$STAGE/spk" "$OUT"
+stage "$STAGE/target"
 
 tar --owner=0 --group=0 --numeric-owner --sort=name -C "$T" -czf "$STAGE/spk/package.tgz" .
 

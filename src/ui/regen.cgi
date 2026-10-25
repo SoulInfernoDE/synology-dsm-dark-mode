@@ -15,7 +15,9 @@
 SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
 TARGET="$(dirname "$(dirname "$SELF")")"
 [ -x "$TARGET/bin/darkmode-regen" ] || TARGET="/var/packages/DarkMode/target"
-VAR="/var/packages/DarkMode/var"
+# The package name differs between the GitHub and the SynoCommunity package.
+PKG="$(basename "$(readlink -f "$TARGET")")"
+VAR="/var/packages/${PKG}/var"
 MANIFEST="$TARGET/ui/manifest.json"
 AUTH_CGI="/usr/syno/synoman/webman/modules/authenticate.cgi"
 LOGIN_CGI="/usr/syno/synoman/webman/login.cgi"
@@ -43,7 +45,7 @@ mkdir -p "$VAR"
 # Prints "rebuild" or "fresh". Remembers new stylesheets in extra-sheets.txt.
 decision="$(head -c "$len" | python3 -I -c '
 import json, os, re, sys
-extras, manifest_path, page_list, root = sys.argv[1], sys.argv[2], sys.argv[3], "/usr/syno/synoman"
+extras, manifest_path, page_list, own, root = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], "/usr/syno/synoman"
 try:
     body = json.load(sys.stdin)
 except ValueError:
@@ -56,7 +58,7 @@ try:
 except OSError:
     known = []
 ok = re.compile(r"^[A-Za-z0-9_./@-]+\.css(\?[A-Za-z0-9=&._-]*)?$")
-valid = lambda s: isinstance(s, str) and ok.match(s) and ".." not in s and not s.startswith("webman/3rdparty/DarkMode/")
+valid = lambda s: isinstance(s, str) and ok.match(s) and ".." not in s and not s.startswith(own)
 if isinstance(every, list):
     page = [s for s in every[:400] if valid(s)]
     if page:
@@ -95,7 +97,7 @@ try:
 except (OSError, ValueError):
     state = None
 print("rebuild" if added or changed or not sources or state in ("waiting", "failed") else "fresh")
-' "$VAR/extra-sheets.txt" "$MANIFEST" "$VAR/page-sheets.txt")"
+' "$VAR/extra-sheets.txt" "$MANIFEST" "$VAR/page-sheets.txt" "webman/3rdparty/${PKG}/")"
 
 [ "$decision" = "rebuild" ] || respond "200 OK" '{"ok":true,"started":false}'
 

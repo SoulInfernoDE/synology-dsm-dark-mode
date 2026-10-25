@@ -872,6 +872,7 @@ def main(argv=None):
                     help="file with stylesheet hrefs (one per line), appended after the index ones; repeatable")
     ap.add_argument("--cache", help="directory to cache recolored images between runs")
     ap.add_argument("--manifest", help="write the list of processed stylesheets as JSON")
+    ap.add_argument("--own-dir", default=OWN_DIR, help="web path of this package's UI folder (skipped as input)")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
 
@@ -889,7 +890,7 @@ def main(argv=None):
     paths, seen = [], set()
     for h in hrefs:
         p = web_path(h)
-        if p and p not in seen and not p.startswith(OWN_DIR):
+        if p and p not in seen and not p.startswith(args.own_dir):
             seen.add(p)
             paths.append(p)
 

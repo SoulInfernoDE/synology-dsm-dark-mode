@@ -151,8 +151,8 @@ taskbar. Stopping the package turns the theme off.
 
 The first build takes a few seconds, on slower models up to a few minutes;
 until then DSM stays light and the taskbar menu says that the theme is being
-created. If it cannot be created, the menu says so and the details are in
-**Package Center > Dark Mode for DSM > Log**.
+created. If it cannot be created, the menu says so and names the log file
+(`/var/packages/<package>/var/regen.log`).
 
 ## Limitations
 
@@ -179,6 +179,9 @@ tools/dsm-inventory.sh  inventory of the DSM parts the package depends on
 tools/screenshots.py    README screenshots (headless Firefox, DSM_USER/DSM_PASS)
 package/                SPK control files
 ```
+
+`./build.sh --stage <dir>` only installs the package files into `<dir>`
+(used by the SynoCommunity build).
 
 The generator also runs on a PC against a saved DSM start page:
 

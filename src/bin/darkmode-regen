@@ -10,7 +10,9 @@
 
 SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
 TARGET="${SYNOPKG_PKGDEST:-$(dirname "$(dirname "$SELF")")}"
-VAR="${SYNOPKG_PKGVAR:-/var/packages/DarkMode/var}"
+# The package name differs between the GitHub and the SynoCommunity package.
+PKG="${SYNOPKG_PKGNAME:-$(basename "$(readlink -f "$TARGET")")}"
+VAR="${SYNOPKG_PKGVAR:-/var/packages/${PKG}/var}"
 UI="$TARGET/ui"
 LOCK="$VAR/regen.lock"
 LOG="$VAR/regen.log"
@@ -112,6 +114,7 @@ fi
 
 if python3 "$TARGET/lib/darkgen.py" "$@" \
      --root /usr/syno/synoman \
+     --own-dir "webman/3rdparty/${PKG}/" \
      --list "$VAR/extra-sheets.txt" \
      --base "$TARGET/share/base.css" \
      --extra "$TARGET/share/extra.css" \

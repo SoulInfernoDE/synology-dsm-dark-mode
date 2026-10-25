@@ -15,7 +15,14 @@ Ext.namespace("SYNO.SDS.DarkMode");
 if (!SYNO.SDS.DarkMode.start) (function () {
 
   SYNO.SDS.DarkMode.APP = "SYNO.SDS.DarkMode.Instance";
-  SYNO.SDS.DarkMode.BASE = "webman/3rdparty/DarkMode/";
+  // The package folder in the DSM web root ("webman/3rdparty/<package>/"), from
+  // DSM's own app configuration: the package name differs between the GitHub
+  // and the SynoCommunity package.
+  SYNO.SDS.DarkMode.BASE = (function () {
+    const entry = SYNO.SDS.Config.FnMap["SYNO.SDS.DarkMode.Instance"];
+    const url = entry && entry.config && entry.config.jsBaseURL;
+    return url ? url.replace(/\/?$/, "/") : "webman/3rdparty/DarkMode/";
+  })();
   SYNO.SDS.DarkMode.AUTO_MEDIA = "(prefers-color-scheme: dark)";
 
   // --------------------------------------------------------------------------
@@ -696,7 +703,8 @@ if (!SYNO.SDS.DarkMode.start) (function () {
       const state = await Theme.buildState();
       if (Theme.ready()) return;
       const key = state === "failed" ? "failed" : "preparing";
-      this.status.setValue(_TT(SYNO.SDS.DarkMode.APP, "panel", key));
+      const pkg = SYNO.SDS.DarkMode.BASE.replace(/\/$/, "").split("/").pop();
+      this.status.setValue(String.format(_TT(SYNO.SDS.DarkMode.APP, "panel", key), "/var/packages/" + pkg + "/var/regen.log"));
       this.status.show();
       if (this.rendered) this.doLayout();
     }
