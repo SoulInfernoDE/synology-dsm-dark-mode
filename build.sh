@@ -38,6 +38,7 @@ cp LICENSE "$T/LICENSE"
   echo "@media (prefers-color-scheme: dark){}"
 } > "$T/ui/style.css"
 echo '{"generator":0,"signature":"placeholder","generated":0,"hrefs":[],"sheets":[]}' > "$T/ui/manifest.json"
+echo '{"state":"pending","time":0}' > "$T/ui/status.json"
 
 # Cache busting. DSM versions style.css with the change time of ui/config and
 # DarkMode.js with its own build number; neither changes on package updates by

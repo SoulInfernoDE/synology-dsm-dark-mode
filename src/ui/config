@@ -10,7 +10,7 @@
       "allowStandalone": false,
       "canLaunch": { "standalone": false },
       "texts": "texts",
-      "preloadTexts": ["app:title", "panel:desc", "mode:auto", "mode:light", "mode:dark"],
+      "preloadTexts": ["app:title", "panel:desc", "panel:preparing", "panel:failed", "mode:auto", "mode:light", "mode:dark"],
       "depend": ["SYNO.SDS.DarkMode.Tray"]
     },
     "SYNO.SDS.DarkMode.Tray": {

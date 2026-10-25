@@ -2,6 +2,8 @@
 title="Darstellung"
 
 [panel]
+preparing="Das dunkle Design wird gerade auf dem NAS erstellt. Nach der Installation oder einem Update des Pakets kann das einige Minuten dauern."
+failed="Das dunkle Design konnte nicht erstellt werden. Details: Paket-Zentrum > Dark Mode for DSM > Protokoll."
 desc="Farbschema von DSM für Ihr Konto:"
 
 [mode]

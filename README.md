@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.svg" width="128" alt="Dark Mode for DSM logo"></p>
+
 # Dark Mode for DSM
 
 [Deutsche Fassung](README.de.md)
@@ -14,6 +16,12 @@ package (no root, no changes to system files, survives DSM updates).
   the user to every browser.
 - Charts (ECharts, e.g. Resource Monitor) are themed through their own color
   options, not with an inverting filter: series colors stay as they are.
+
+![Control Panel and widgets in dark mode](docs/screenshots/desktop-en.png)
+
+| Resource Monitor | Appearance menu in the taskbar |
+| --- | --- |
+| ![Resource Monitor in dark mode](docs/screenshots/resource-monitor-en.png) | ![Appearance menu with Automatic, Light and Dark](docs/screenshots/appearance-menu-en.png) |
 
 ## How it works
 
@@ -51,6 +59,11 @@ the theme on the NAS from the stylesheets DSM actually loads:
    change time are recorded in the manifest) starts a rebuild, and the new
    stylesheet is swapped in without reloading the page. Recolored images are
    cached, so a rebuild takes about 3 seconds.
+7. **Any access path:** the list of stylesheets comes from DSM's start page,
+   fetched locally over HTTP or HTTPS. When the NAS cannot fetch it (reverse
+   proxy, own domain, HTTPS redirect, other ports, access rules), the list the
+   browser reports at login is used instead, so the theme is built however
+   DSM is reached.
 
 The light theme is not changed at all: with "Light" the computed colors of
 all elements are identical to DSM without the package.
@@ -130,6 +143,11 @@ The result is `dist/DarkMode-<version>-noarch.spk` (DSM 7.0 or later, any
 model). After the start, a button with a half filled circle appears in the
 taskbar. Stopping the package turns the theme off.
 
+The first build takes a few seconds, on slower models up to a few minutes;
+until then DSM stays light and the taskbar menu says that the theme is being
+created. If it cannot be created, the menu says so and the details are in
+**Package Center > Dark Mode for DSM > Log**.
+
 ## Limitations
 
 - Pages that are not part of the DSM desktop (Synology Photos, Drive,
@@ -150,8 +168,9 @@ src/share/extra.css     hand-written additions to the dark block
 src/ui/DarkMode.js      loader started by DSM (loads DarkMode.core.js)
 src/ui/DarkMode.core.js mode switch, chart theming, freshness check, tray
 src/ui/regen.cgi        freshness check and rebuild (logged-in users)
+src/bin/darkmode-regen  rebuild script (start page or browser list -> generator)
 tools/dsm-inventory.sh  inventory of the DSM parts the package depends on
-src/bin/darkmode-regen  rebuild script (start page -> generator)
+tools/screenshots.py    README screenshots (headless Firefox, DSM_USER/DSM_PASS)
 package/                SPK control files
 ```
 

@@ -1,9 +1,12 @@
 #!/bin/sh
 # Rebuild the dark stylesheet from the stylesheets DSM currently loads.
 #
-# The list of stylesheets comes from DSM's own start page (in load order),
-# plus stylesheets a browser reported that the start page does not list
-# (var/extra-sheets.txt, written by regen.cgi). Runs as the package user.
+# The list of stylesheets (in load order) comes from DSM's own start page. When
+# the package cannot fetch it (other ports, HTTPS only, access rules), the list
+# a browser reported at login is used instead (var/page-sheets.txt), and as a
+# last resort the start page saved by an earlier run. Stylesheets a browser
+# loaded later are added from var/extra-sheets.txt. Both files are written by
+# regen.cgi. Runs as the package user.
 
 SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
 TARGET="${SYNOPKG_PKGDEST:-$(dirname "$(dirname "$SELF")")}"
@@ -30,6 +33,13 @@ if ! take_lock; then
 fi
 trap 'rm -rf "$LOCK"' EXIT INT TERM
 
+# Build state for the desktop script (ui/status.json, readable by every
+# signed-in user): "running", "ok" or "failed". Details stay in the log.
+status() {
+  printf '{"state":"%s","time":%s}\n' "$1" "$(date +%s)" > "$UI/status.json.tmp" \
+    && mv "$UI/status.json.tmp" "$UI/status.json"
+}
+
 log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
 }
@@ -39,34 +49,69 @@ if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 500 ]; then
   tail -n 200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi
 
-port="$(sed -n 's/^admin_port="\{0,1\}\([0-9]*\)"\{0,1\}$/\1/p' /etc/synoinfo.conf 2>/dev/null | head -n1)"
-[ -n "$port" ] || port=5000
+conf_port() {
+  sed -n "s/^$1=\"\{0,1\}\([0-9]*\)\"\{0,1\}\$/\1/p" /etc/synoinfo.conf 2>/dev/null | head -n1
+}
+http_port="$(conf_port admin_port)"
+https_port="$(conf_port secure_admin_port)"
 
-# At boot the web server may not be up yet: retry for a few minutes.
+# Saves DSM's start page to var/index.html. Redirects are not followed (they
+# may point to an external domain); HTTPS is tried as well. On failure
+# $fetch_error says what happened for each address.
+fetch_start_page() {
+  fetch_error=""
+  for url in "http://127.0.0.1:${http_port:-5000}/" "https://127.0.0.1:${https_port:-5001}/"; do
+    code="$(curl -sSk --max-time 20 -o "$VAR/index.html.tmp" -w '%{http_code}' "$url" 2>"$VAR/curl.err")"
+    if [ "$code" = "200" ] && grep -q 'rel="stylesheet"' "$VAR/index.html.tmp" 2>/dev/null; then
+      mv "$VAR/index.html.tmp" "$VAR/index.html"
+      rm -f "$VAR/curl.err"
+      return 0
+    fi
+    fetch_error="$fetch_error [$url HTTP ${code:-000}$(head -c 160 "$VAR/curl.err" 2>/dev/null | tr '\n' ' ' | sed 's/^/ /')]"
+  done
+  rm -f "$VAR/index.html.tmp" "$VAR/curl.err"
+  return 1
+}
+
+status running
+
+# At boot the web server may not be up yet: retry for a few minutes, unless a
+# list reported by a browser is available.
 tries="${1:-1}"
 i=0
+source=""
 while :; do
-  if curl -fsSkL --max-time 20 "http://127.0.0.1:${port}/" -o "$VAR/index.html.tmp" 2>/dev/null \
-     && grep -q 'rel="stylesheet"' "$VAR/index.html.tmp"; then
-    mv "$VAR/index.html.tmp" "$VAR/index.html"
+  if fetch_start_page; then
+    source=index
+    break
+  fi
+  if [ -s "$VAR/page-sheets.txt" ]; then
+    log "start page not reachable:$fetch_error - using the stylesheet list reported by the browser"
+    source=browser
     break
   fi
   i=$((i + 1))
   if [ "$i" -ge "$tries" ]; then
-    rm -f "$VAR/index.html.tmp"
     if [ -f "$VAR/index.html" ]; then
-      log "start page not reachable, using the last saved one"
+      log "start page not reachable:$fetch_error - using the start page saved earlier"
+      source=index
       break
     fi
-    log "start page not reachable on port $port, nothing generated"
+    log "start page not reachable:$fetch_error - waiting for the next login, the browser then reports the stylesheet list"
+    status waiting
     exit 1
   fi
   sleep 10
 done
 
-if python3 "$TARGET/lib/darkgen.py" \
+if [ "$source" = "index" ]; then
+  set -- --index "$VAR/index.html"
+else
+  set -- --list "$VAR/page-sheets.txt"
+fi
+
+if python3 "$TARGET/lib/darkgen.py" "$@" \
      --root /usr/syno/synoman \
-     --index "$VAR/index.html" \
      --list "$VAR/extra-sheets.txt" \
      --base "$TARGET/share/base.css" \
      --extra "$TARGET/share/extra.css" \
@@ -74,7 +119,9 @@ if python3 "$TARGET/lib/darkgen.py" \
      --manifest "$UI/manifest.json" \
      --out "$UI/style.css" 2>> "$LOG"; then
   log "stylesheet rebuilt"
+  status ok
 else
   log "generator failed"
+  status failed
   exit 1
 fi

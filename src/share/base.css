@@ -20,3 +20,7 @@
 .sds-darkmode-panel .sds-darkmode-desc {
   margin-bottom: 6px;
 }
+.sds-darkmode-panel .sds-darkmode-status {
+  margin-top: 8px;
+  opacity: 0.8;
+}

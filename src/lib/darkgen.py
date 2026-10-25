@@ -26,10 +26,8 @@ import json
 import math
 import os
 import re
-import struct
 import sys
 import time
-import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import darkimg  # noqa: E402
@@ -565,7 +563,7 @@ class Images:
             else:
                 text = darkimg.dark_svg(data.decode("utf-8", "replace"), parse_color, transform)
                 new = text.encode("utf-8") if text else None
-        except (darkimg.Unsupported, zlib.error, ValueError, IndexError, struct.error):
+        except Exception:  # broken or unusual images keep their original look
             new = None
         if not new:
             if cached:
@@ -790,7 +788,11 @@ class Generator:
 def collect_root_vars(sheets):
     root = {}
     for css in sheets:
-        for prelude, body in parse_blocks(strip_comments(css)):
+        try:
+            blocks = list(parse_blocks(strip_comments(css)))
+        except Exception:  # reported when the sheet itself is converted
+            continue
+        for prelude, body in blocks:
             if body is None:
                 continue
             if prelude.strip() in (":root", "html", ":root,html", "html,:root"):
@@ -866,7 +868,8 @@ def main(argv=None):
     ap.add_argument("--base", action="append", default=[], help="CSS placed before the dark block (always active)")
     ap.add_argument("--extra", action="append", default=[], help="hand-written CSS appended to the dark block")
     ap.add_argument("--index", help="saved DSM index HTML to read the stylesheet list from")
-    ap.add_argument("--list", help="file with more stylesheet hrefs (one per line), appended after the index ones")
+    ap.add_argument("--list", action="append", default=[],
+                    help="file with stylesheet hrefs (one per line), appended after the index ones; repeatable")
     ap.add_argument("--cache", help="directory to cache recolored images between runs")
     ap.add_argument("--manifest", help="write the list of processed stylesheets as JSON")
     ap.add_argument("--quiet", action="store_true")
@@ -876,9 +879,10 @@ def main(argv=None):
     if args.index:
         with open(args.index, encoding="utf-8", errors="replace") as f:
             hrefs += hrefs_from_index(f.read())
-    if args.list and os.path.exists(args.list):
-        with open(args.list, encoding="utf-8") as f:
-            hrefs += [l.strip() for l in f if l.strip()]
+    for name in args.list:
+        if os.path.exists(name):
+            with open(name, encoding="utf-8") as f:
+                hrefs += [l.strip() for l in f if l.strip()]
     if not hrefs:
         ap.error("no stylesheets: pass --index and/or --list")
 
@@ -899,9 +903,15 @@ def main(argv=None):
     images = Images(args.root, os.path.join(os.path.dirname(os.path.abspath(args.out)), IMG_DIR), args.cache)
     gen = Generator(Context(collect_root_vars([c for _, c in sheets])), images)
     body = []
+    skipped = []
     for p, css in sheets:
         chunk = []
-        gen.convert_sheet(css, p, chunk)
+        try:
+            gen.convert_sheet(css, p, chunk)
+        except Exception as e:  # one unreadable stylesheet must not stop the build
+            skipped.append(p)
+            sys.stderr.write("darkgen: skipped %s: %s: %s\n" % (p, type(e).__name__, e))
+            continue
         if chunk:
             body.append("/* %s */\n%s" % (p, "\n".join(chunk)))
         gen.stats["files"] += 1
@@ -943,6 +953,7 @@ def main(argv=None):
                        "generated": int(time.time()),
                        "hrefs": list(dict.fromkeys(re.sub(r"^(\./|/)+", "", h.strip()) for h in hrefs)),
                        "sheets": paths,
+                       "skipped": skipped,
                        "sources": fingerprints(args.root, paths)}, f)
         os.replace(tmp, args.manifest)
 

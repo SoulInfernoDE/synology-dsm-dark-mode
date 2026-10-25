@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.svg" width="128" alt="Logo von Dark Mode für DSM"></p>
+
 # Dark Mode für DSM
 
 [English version](README.md)
@@ -16,6 +18,12 @@ DSM-Updates).
 - Diagramme (ECharts, z. B. Ressourcen-Monitor) werden über ihre eigenen
   Farboptionen eingefärbt, nicht mit einem Invertierungsfilter: Die Farben der
   Datenreihen bleiben erhalten.
+
+![Systemsteuerung und Widgets im dunklen Design](docs/screenshots/desktop-de.png)
+
+| Ressourcen-Monitor | Darstellungsmenü in der Taskleiste |
+| --- | --- |
+| ![Ressourcen-Monitor im dunklen Design](docs/screenshots/resource-monitor-de.png) | ![Darstellungsmenü mit Automatisch, Hell und Dunkel](docs/screenshots/appearance-menu-de.png) |
 
 ## Funktionsweise
 
@@ -57,6 +65,12 @@ tatsächlich lädt:
    und das neue Stylesheet wird ohne Neuladen der Seite eingesetzt.
    Umgefärbte Bilder werden zwischengespeichert, ein Neuaufbau dauert etwa
    3 Sekunden.
+7. **Jeder Zugangsweg:** Die Liste der Stylesheets stammt von DSMs
+   Startseite, lokal per HTTP oder HTTPS abgerufen. Kann das NAS sie nicht
+   abrufen (Reverse Proxy, eigene Domain, HTTPS-Weiterleitung, andere Ports,
+   Zugriffsregeln), wird die Liste verwendet, die der Browser bei der
+   Anmeldung meldet – das Design entsteht also unabhängig davon, wie DSM
+   aufgerufen wird.
 
 Das helle Design bleibt völlig unverändert: Mit „Hell“ sind die berechneten
 Farben aller Elemente identisch mit DSM ohne Paket.
@@ -139,6 +153,11 @@ Ergebnis ist `dist/DarkMode-<Version>-noarch.spk` (DSM 7.0 oder neuer, jedes
 Modell). Nach dem Start erscheint in der Taskleiste ein Symbol mit einem halb
 gefüllten Kreis. Wird das Paket angehalten, ist das Design aus.
 
+Die erste Erstellung dauert einige Sekunden, auf langsameren Modellen bis zu
+einigen Minuten; bis dahin bleibt DSM hell, und das Menü in der Taskleiste
+zeigt, dass das Design erstellt wird. Kann es nicht erstellt werden, steht das
+im Menü, die Details unter **Paket-Zentrum > Dark Mode for DSM > Protokoll**.
+
 ## Grenzen
 
 - Seiten außerhalb des DSM-Desktops (Synology Photos, Drive, Office und
@@ -160,7 +179,8 @@ src/ui/DarkMode.js      von DSM gestarteter Lader (lädt DarkMode.core.js)
 src/ui/DarkMode.core.js Umschalter, Diagramme, Aktualitätsprüfung, Taskleiste
 src/ui/regen.cgi        Aktualitätsprüfung und Neuaufbau (angemeldete Benutzer)
 tools/dsm-inventory.sh  Bestandsaufnahme der DSM-Teile, auf die das Paket angewiesen ist
-src/bin/darkmode-regen  Neuaufbau-Skript (Startseite -> Generator)
+tools/screenshots.py    README-Screenshots (headless Firefox, DSM_USER/DSM_PASS)
+src/bin/darkmode-regen  Neuaufbau-Skript (Startseite oder Browser-Liste -> Generator)
 package/                SPK-Steuerdateien
 ```
 
