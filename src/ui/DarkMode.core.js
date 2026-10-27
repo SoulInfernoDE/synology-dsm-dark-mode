@@ -32,7 +32,7 @@ if (!SYNO.SDS.DarkMode.start) (function () {
   SYNO.SDS.DarkMode.Palette = (function () {
     const NEUTRAL_CHROMA = 0.045, SURFACE_L = 0.235, SURFACE_SPAN = 0.48;
     const TEXT_L = 0.93, TEXT_SPAN = 0.40, BORDER_L = 0.355, BORDER_SPAN = 0.45;
-    const ACCENT_TEXT_MIN_L = 0.72, INVISIBLE_BORDER_L = 0.97;
+    const ACCENT_TEXT_MIN_L = 0.80, INVISIBLE_BORDER_L = 0.97, TINT_MAX_ALPHA = 0.3;
 
     const lin = c => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
     const unlin = c => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
@@ -137,6 +137,12 @@ if (!SYNO.SDS.DarkMode.start) (function () {
           : format([c[0], c[1], c[2]].map(Math.round), Math.min(1, c[3] * 1.6));
       } else if (c && c[3] > 0) {
         const lch = toOklch(c[0], c[1], c[2]);
+        if (role === "bg" && c[3] <= TINT_MAX_ALPHA && lch[1] < NEUTRAL_CHROMA && lch[0] < 0.5) {
+          // Faint dark tints shade white surfaces; on dark ones they lighten.
+          out = format([255, 255, 255], c[3]);
+          cache[key] = out;
+          return out;
+        }
         const next = roles[role](lch[0], lch[1]);
         out = format(fromOklch(next[0], next[1], lch[2]), c[3]);
       }
@@ -156,7 +162,29 @@ if (!SYNO.SDS.DarkMode.start) (function () {
     const ORIGINAL = "__dsmDarkOriginal";
     const TEXT_KEYS = /^(textStyle|axisLabel|label|title|subtextStyle|legend|nameTextStyle|axisPointer)$/;
     const BORDER_KEYS = /^(axisLine|splitLine|axisTick|minorSplitLine|lineStyle)$/;
+    const DEFAULT_TEXT = "#333";  // ECharts 4 text and axis label color
     let dark = false;
+
+    // Colors ECharts derives itself (axis labels take the axis line color,
+    // other text the theme color) are made explicit: dark mode can then set
+    // them, and null hands them back to ECharts in light mode.
+    function withDefaults(key, value) {
+      const axis = a => (a && typeof a === "object" ? Object.assign({}, a, {
+        axisLabel: Object.assign({ color: null }, a.axisLabel),
+        nameTextStyle: Object.assign({ color: null }, a.nameTextStyle)
+      }) : a);
+      if (key === "xAxis" || key === "yAxis") return Array.isArray(value) ? value.map(axis) : axis(value);
+      if (key === "textStyle") return Object.assign({ color: null }, value);
+      return value;
+    }
+
+    function explicit(option) {
+      const out = Object.assign({}, option);
+      for (const key of ["xAxis", "yAxis", "textStyle"]) {
+        if (key in out) out[key] = withDefaults(key, out[key]);
+      }
+      return out;
+    }
 
     function roleFor(key, path) {
       if (!/color$/i.test(key)) return null;
@@ -176,6 +204,7 @@ if (!SYNO.SDS.DarkMode.start) (function () {
         const role = roleFor(key || "", path);
         return role ? P.transform(value, role) : value;
       }
+      if (value === null && roleFor(key || "", path) === "text") return P.transform(DEFAULT_TEXT, "text");
       if (!value || typeof value !== "object") return value;
       const out = {};
       for (const k of Object.keys(value)) out[k] = darken(value[k], path.concat(k), k);
@@ -187,7 +216,7 @@ if (!SYNO.SDS.DarkMode.start) (function () {
     function remember(chart, option) {
       const keep = chart[ORIGINAL] || (chart[ORIGINAL] = {});
       for (const key of ["backgroundColor", "grid", "xAxis", "yAxis", "textStyle", "legend", "title", "tooltip"]) {
-        if (option && key in option) keep[key] = option[key];
+        if (option && key in option) keep[key] = withDefaults(key, option[key]);
       }
     }
 
@@ -198,13 +227,15 @@ if (!SYNO.SDS.DarkMode.start) (function () {
       chart.setOption = function (option) {
         remember(chart, option);
         const args = Array.prototype.slice.call(arguments);
-        if (dark && option && typeof option === "object") args[0] = darken(option, [], "");
+        if (dark && option && typeof option === "object") args[0] = darken(explicit(option), [], "");
         return setOption.apply(chart, args);
       };
       if (!chart[ORIGINAL]) {
         const current = chart.getOption && chart.getOption();
         if (current) remember(chart, current);
       }
+      // General text color as well, even when the chart never set textStyle.
+      if (chart[ORIGINAL] && !chart[ORIGINAL].textStyle) chart[ORIGINAL].textStyle = { color: null };
       apply(chart);
     }
 
@@ -479,6 +510,24 @@ if (!SYNO.SDS.DarkMode.start) (function () {
       return null;
     }
 
+    // The dark blocks of every loaded copy: after login DSM inserts its links
+    // again, and an older copy with the original condition would keep the page
+    // dark although the user chose "Light".
+    function darkBlocks() {
+      const blocks = [];
+      for (const link of ownLinks()) {
+        try {
+          for (const rule of link.sheet ? link.sheet.cssRules : []) {
+            if (rule.type === CSSRule.MEDIA_RULE) {
+              blocks.push(rule);
+              break;
+            }
+          }
+        } catch (e) { /* not loaded yet */ }
+      }
+      return blocks;
+    }
+
     // Build signature written by the generator into the dark block.
     function loadedSignature() {
       const block = darkBlock();
@@ -514,9 +563,10 @@ if (!SYNO.SDS.DarkMode.start) (function () {
     }
 
     function apply() {
-      const block = darkBlock();
       const text = mode === "dark" ? "all" : mode === "light" ? "not all" : DM.AUTO_MEDIA;
-      if (block && block.media.mediaText !== text) block.media.mediaText = text;
+      for (const block of darkBlocks()) {
+        if (block.media.mediaText !== text) block.media.mediaText = text;
+      }
       // Runtime styles only while the generated stylesheet is there as well.
       DM.RuntimeStyles.setMedia(ready() ? text : "not all");
       // Charts and the page attribute follow the stylesheet: while the NAS is
@@ -617,6 +667,17 @@ if (!SYNO.SDS.DarkMode.start) (function () {
           const onChange = () => { if (mode === "auto") apply(); };
           media.addEventListener ? media.addEventListener("change", onChange) : media.addListener(onChange);
         }
+        // A copy of the stylesheet DSM inserts later starts with the original
+        // condition: give it the user's choice once it has loaded.
+        new MutationObserver(records => {
+          for (const record of records) {
+            for (const node of record.addedNodes) {
+              if (node.tagName === "LINK" && ownLinks().indexOf(node) >= 0) {
+                node.addEventListener("load", apply, { once: true });
+              }
+            }
+          }
+        }).observe(document.head, { childList: true });
         checkFresh();
       },
       getMode: () => mode,

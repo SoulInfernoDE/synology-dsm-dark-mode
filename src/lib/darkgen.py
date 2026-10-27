@@ -208,8 +208,9 @@ TEXT_L = 0.93          # primary text (light: near black)
 TEXT_SPAN = 0.40
 BORDER_L = 0.355       # light borders
 BORDER_SPAN = 0.45
-ACCENT_TEXT_MIN_L = 0.72
+ACCENT_TEXT_MIN_L = 0.80
 INVISIBLE_BORDER_L = 0.97  # neutral borders this light act like the surface
+TINT_MAX_ALPHA = 0.3       # dark neutral backgrounds up to this alpha are tints
 
 
 def _dark_bg(L, C, h, a):
@@ -259,6 +260,11 @@ def transform(rgba, role):
             # Light emboss shadows look like glow on dark backgrounds.
             return 0, 0, 0, round(a * 0.5, 3)
         return r, g, b, min(1.0, a * 1.6)
+    if role == "bg" and a <= TINT_MAX_ALPHA and C < NEUTRAL_CHROMA and L < 0.5:
+        # A faint dark tint (progress bar tracks, hover and zebra rows) shades
+        # a white surface a little. On a dark surface the same contrast needs
+        # a faint light tint; stronger dark overlays (dialog masks) stay dark.
+        return 255, 255, 255, a
     fn = {"bg": _dark_bg, "text": _dark_text, "border": _dark_border}[role]
     L2, C2 = fn(L, C, h, a)
     r2, g2, b2 = oklch_to_rgb(L2, C2, h)
