@@ -6,8 +6,9 @@
 // the login page and the desktop follow the operating system without any
 // script. This file adds the per-user choice (automatic, light, dark) by
 // rewriting the condition of that block, themes ECharts charts (they paint on
-// a canvas, which CSS cannot reach) and keeps the stylesheet up to date when
-// DSM or packages change their stylesheets.
+// a canvas, which CSS cannot reach), marks package icons that need a light
+// plate and keeps the stylesheet up to date when DSM or packages change their
+// stylesheets.
 Ext.namespace("SYNO.SDS.DarkMode");
 
 // Runs once per page: a second start of the app loads this file again, and
@@ -477,6 +478,124 @@ if (!SYNO.SDS.DarkMode.start) (function () {
   })();
 
   // --------------------------------------------------------------------------
+  // Package icons: Package Center shows the icon each package brings, drawn
+  // for light pages. Icons that largely vanish on the dark surface (dark
+  // shapes on a transparent background) are marked here; extra.css puts a
+  // light plate behind them in dark mode, so the artwork itself stays as it is.
+  // --------------------------------------------------------------------------
+
+  SYNO.SDS.DarkMode.PackageIcons = (function () {
+    const SELECTOR = "img.syno-pkg-icon-img";
+    const PLATE = "dsmdark-icon-plate";
+    const SIZE = 64;           // analysis resolution
+    const REACH = 3;           // a pixel counts as seen when a visible one is this close
+    const MIN_CONTRAST = 2.0;  // against the dark surface
+    const MIN_SEEN = 0.7;      // share of the icon that has to be seen without a plate
+    const TILE_FILL = 0.85;    // shapes this solid are tiles with their own background
+    const verdicts = new Map();  // icon URL without the session token -> Promise<boolean>
+    let surface = null;
+    let timer = null;
+    let started = false;
+
+    const lin = c => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const luminance = (r, g, b) => 0.2126 * lin(r / 255) + 0.7152 * lin(g / 255) + 0.0722 * lin(b / 255);
+
+    // Luminance of the dark surface that replaces DSM's white pages.
+    function surfaceLuminance() {
+      if (surface === null) {
+        const hex = SYNO.SDS.DarkMode.Palette.transform("#ffffff", "bg").slice(1);
+        surface = luminance(parseInt(hex.substr(0, 2), 16), parseInt(hex.substr(2, 2), 16), parseInt(hex.substr(4, 2), 16));
+      }
+      return surface;
+    }
+
+    async function needsPlate(url) {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = SIZE;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, SIZE, SIZE);
+      const d = ctx.getImageData(0, 0, SIZE, SIZE).data;
+      const Ls = surfaceLuminance();
+      const visible = new Uint8Array(SIZE * SIZE);
+      let solid = 0, x0 = SIZE, x1 = -1, y0 = SIZE, y1 = -1;
+      for (let k = 0; k < SIZE * SIZE; k++) {
+        if (d[k * 4 + 3] < 128) continue;
+        const x = k % SIZE, y = (k - x) / SIZE;
+        solid++;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+        const L = luminance(d[k * 4], d[k * 4 + 1], d[k * 4 + 2]);
+        if ((Math.max(L, Ls) + 0.05) / (Math.min(L, Ls) + 0.05) >= MIN_CONTRAST) visible[k] = 1;
+      }
+      // A (rounded) square tile is a background of its own, also when dark.
+      if (!solid || solid >= TILE_FILL * (x1 - x0 + 1) * (y1 - y0 + 1)) return false;
+      // Dark outlines and dark details next to visible parts still read well;
+      // what has no visible pixel nearby is lost.
+      const seen = new Uint8Array(SIZE * SIZE);
+      for (let y = 0; y < SIZE; y++) {
+        for (let x = 0; x < SIZE; x++) {
+          if (!visible[y * SIZE + x]) continue;
+          for (let j = Math.max(0, y - REACH); j <= Math.min(SIZE - 1, y + REACH); j++) {
+            seen.fill(1, j * SIZE + Math.max(0, x - REACH), j * SIZE + Math.min(SIZE, x + REACH + 1));
+          }
+        }
+      }
+      // A visible outline keeps the shape readable however dark the inside is.
+      const solidAt = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE && d[(y * SIZE + x) * 4 + 3] >= 128;
+      let weight = 0, shown = 0, edge = 0, edgeShown = 0;
+      for (let k = 0; k < SIZE * SIZE; k++) {
+        const a = d[k * 4 + 3] / 255;
+        weight += a;
+        if (seen[k]) shown += a;
+        if (a < 0.5) continue;
+        const x = k % SIZE, y = (k - x) / SIZE;
+        if (solidAt(x - 1, y) && solidAt(x + 1, y) && solidAt(x, y - 1) && solidAt(x, y + 1)) continue;
+        edge++;
+        if (seen[k]) edgeShown++;
+      }
+      return shown / weight < MIN_SEEN && edgeShown / edge < MIN_SEEN;
+    }
+
+    function verdict(key, url) {
+      if (!verdicts.has(key)) {
+        // Unreadable images (other origin, broken) keep their look.
+        verdicts.set(key, needsPlate(url).catch(() => false));
+      }
+      return verdicts.get(key);
+    }
+
+    function scan() {
+      timer = null;
+      for (const el of document.querySelectorAll(SELECTOR)) {
+        const m = (el.style.backgroundImage || "").match(/url\(["']?([^"')]+)["']?\)/);
+        if (!m) continue;
+        const key = m[1].replace(/([?&])SynoToken=[^&]*&?/, "$1");
+        if (el.dataset.dsmdarkIcon === key) continue;
+        el.dataset.dsmdarkIcon = key;
+        el.classList.remove(PLATE);
+        verdict(key, m[1]).then(plate => {
+          if (el.dataset.dsmdarkIcon === key) el.classList.toggle(PLATE, plate);
+        });
+      }
+    }
+
+    function schedule() {
+      if (!timer) timer = setTimeout(scan, 200);
+    }
+
+    return {
+      start() {
+        if (started) return;
+        started = true;
+        new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+        scan();
+      }
+    };
+  })();
+
+  // --------------------------------------------------------------------------
   // Theme: user choice, stylesheet switch and stylesheet freshness
   // --------------------------------------------------------------------------
 
@@ -662,6 +781,7 @@ if (!SYNO.SDS.DarkMode.start) (function () {
       MODES: MODES,
       init() {
         DM.RuntimeStyles.start();
+        DM.PackageIcons.start();
         setMode(SYNO.SDS.UserSettings.getProperty(DM.APP, "mode") || "auto", false);
         if (media) {
           const onChange = () => { if (mode === "auto") apply(); };

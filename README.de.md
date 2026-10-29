@@ -18,6 +18,9 @@ DSM-Updates).
 - Diagramme (ECharts, z. B. Ressourcen-Monitor) werden über ihre eigenen
   Farboptionen eingefärbt, nicht mit einem Invertierungsfilter: Die Farben der
   Datenreihen bleiben erhalten.
+- Paket-Icons im Paket-Zentrum bleiben so, wie ihre Autoren sie gezeichnet
+  haben. Icons, die auf dem dunklen Hintergrund weitgehend verschwinden würden
+  (dunkle Formen ohne hellen Rand), bekommen eine helle Kachel hinterlegt.
 
 ![Systemsteuerung und Widgets im dunklen Design](docs/screenshots/desktop-de.png)
 

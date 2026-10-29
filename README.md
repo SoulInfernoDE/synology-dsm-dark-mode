@@ -16,6 +16,9 @@ package (no root, no changes to system files, survives DSM updates).
   the user to every browser.
 - Charts (ECharts, e.g. Resource Monitor) are themed through their own color
   options, not with an inverting filter: series colors stay as they are.
+- Package icons in Package Center stay as their authors drew them. Icons that
+  would largely vanish on the dark background (dark shapes without a light
+  outline) get a light plate behind them.
 
 ![Control Panel and widgets in dark mode](docs/screenshots/desktop-en.png)
 

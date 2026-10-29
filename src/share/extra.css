@@ -2,7 +2,8 @@
  * Hand-written additions to the generated dark theme. Everything here ends up
  * inside the same dark @media block as the generated rules, so it follows the
  * same switch. Keep this file small: only things the generator cannot derive
- * from DSM's stylesheets belong here (inline styles, canvas drawings).
+ * from DSM's stylesheets belong here (inline styles, canvas drawings,
+ * elements marked by DarkMode.core.js).
  * ECharts charts are themed by DarkMode.js through their options.
  */
 
@@ -18,4 +19,12 @@ input,
 textarea,
 select {
   background-color: #1e1e1e;
+}
+
+/* Package icons that largely vanish on dark surfaces (marked by
+   DarkMode.core.js) get a light plate, like the light page they were drawn
+   for. !important beats the inline "background" of Package Center's icons. */
+img.dsmdark-icon-plate {
+  background-color: #e8e8e8 !important;
+  border-radius: 22%;
 }
